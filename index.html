@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AstroStackPro: stack night-sky photos in your browser</title>
+  <meta name="description" content="Align and stack astrophotography frames right in your browser. Nothing is uploaded.">
+  <meta name="theme-color" content="#0f1b2d">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f1b2d'/%3E%3Cpath d='M16 5l2.2 8.8L27 16l-8.8 2.2L16 27l-2.2-8.8L5 16l8.8-2.2z' fill='%23ece6d6'/%3E%3Ccircle cx='24' cy='8' r='2' fill='%23f0708a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l2.6 10.4L29 16l-10.4 2.6L16 29l-2.6-10.4L3 16l10.4-2.6z"/></svg>
+      <h1>AstroStackPro</h1>
+    </div>
+    <p class="masthead-note">Your photos never leave this device. All processing runs in your browser.</p>
+  </header>
+
+  <main class="desk">
+    <!-- ============================================================ viewer -->
+    <section class="chart" aria-label="Image viewer">
+      <div class="chart-frame" id="frame">
+        <div class="ticks ticks-top" aria-hidden="true"></div>
+        <div class="ticks ticks-left" aria-hidden="true"></div>
+
+        <div class="stage" id="stage">
+          <label class="drop" id="drop" for="fileInput">
+            <svg viewBox="0 0 120 80" class="drop-art" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="1.2">
+                <rect x="30" y="18" width="56" height="42" rx="3" opacity=".35"/>
+                <rect x="24" y="12" width="56" height="42" rx="3" opacity=".6"/>
+                <rect x="18" y="6" width="56" height="42" rx="3"/>
+              </g>
+              <g fill="currentColor"><circle cx="34" cy="20" r="1.4"/><circle cx="52" cy="30" r="2.2"/><circle cx="62" cy="16" r="1"/><circle cx="42" cy="38" r="1"/><circle cx="66" cy="38" r="1.4"/></g>
+            </svg>
+            <span class="drop-title">Drop your night-sky photos here</span>
+            <span class="drop-sub">or <u>choose files</u>. Use 5 to 500 shots of the same patch of sky.<br>JPEG, PNG, WebP, AVIF, and HEIC in Safari.</span>
+          </label>
+          <canvas id="view" hidden></canvas>
+          <div class="stage-hint" id="stageHint" hidden></div>
+        </div>
+
+        <div class="viewer-bar" id="viewerBar" hidden>
+          <div class="seg" role="group" aria-label="Zoom">
+            <button type="button" class="seg-btn is-on" data-zoom="fit">Fit</button>
+            <button type="button" class="seg-btn" data-zoom="1">100%</button>
+          </div>
+          <button type="button" class="ghost-btn" id="compareBtn" hidden title="Hold to see a single frame (shortcut: hold C)">Hold to compare with one frame</button>
+          <span class="viewer-caption" id="viewerCaption"></span>
+        </div>
+      </div>
+
+      <div class="strip-wrap" id="stripWrap" hidden>
+        <div class="strip-head">
+          <span id="stripTitle">Frames</span>
+          <span class="strip-help">Click a frame to leave it out of the next stack.</span>
+        </div>
+        <ol class="strip" id="strip"></ol>
+      </div>
+    </section>
+
+    <!-- ============================================================ log -->
+    <aside class="log" aria-label="Stacking steps">
+      <section class="entry" id="stepPhotos">
+        <h2><span class="entry-n">1</span>Photos</h2>
+        <p class="entry-body" id="photosSummary">No photos yet.</p>
+        <div class="row-actions" id="photosActions" hidden>
+          <label class="ghost-btn" for="fileInput">Add more</label>
+          <button type="button" class="ghost-btn" id="clearBtn">Remove all</button>
+        </div>
+        <div class="notice" id="notice" hidden></div>
+      </section>
+
+      <section class="entry" id="stepMode">
+        <h2><span class="entry-n">2</span>How much time do you have?</h2>
+        <div class="presets" role="radiogroup" aria-label="Quality preset" id="presets">
+          <button type="button" class="preset" role="radio" data-preset="quick">
+            <span class="preset-name">Quick look</span>
+            <span class="preset-desc">Half resolution, a single pass, plain average.</span>
+            <span class="preset-eta" data-eta="quick">–</span>
+          </button>
+          <button type="button" class="preset" role="radio" data-preset="balanced">
+            <span class="preset-name">Balanced</span>
+            <span class="preset-desc">Full resolution, rotation-aware alignment, removes satellites and planes.</span>
+            <span class="preset-eta" data-eta="balanced">–</span>
+          </button>
+          <button type="button" class="preset" role="radio" data-preset="best">
+            <span class="preset-name">Best quality</span>
+            <span class="preset-desc">Keeps the sharpest 90%, sharper resampling, the most robust rejection.</span>
+            <span class="preset-eta" data-eta="best">–</span>
+          </button>
+          <button type="button" class="preset" role="radio" data-preset="trails">
+            <span class="preset-name">Star trails</span>
+            <span class="preset-desc">No alignment. Keeps the brightest pixel so stars draw arcs.</span>
+            <span class="preset-eta" data-eta="trails">–</span>
+          </button>
+        </div>
+
+        <details class="custom" id="custom">
+          <summary>Fine-tune <span class="custom-state" id="customState"></span></summary>
+          <div class="fields">
+            <label class="field"><span>Stacking method</span>
+              <select data-setting="method">
+                <option value="mean">Average</option>
+                <option value="weighted">Weighted average (sharper frames count more)</option>
+                <option value="median">Median</option>
+                <option value="sigma">Sigma clipping</option>
+                <option value="winsor">Winsorized sigma clipping</option>
+                <option value="max">Maximum (star trails)</option>
+              </select>
+            </label>
+            <label class="field" data-show="robust"><span>Rejection strength</span>
+              <select data-setting="kappa">
+                <option value="2">Strong (κ 2.0)</option>
+                <option value="2.5">Normal (κ 2.5)</option>
+                <option value="3">Gentle (κ 3.0)</option>
+              </select>
+            </label>
+            <label class="field"><span>Alignment</span>
+              <select data-setting="align">
+                <option value="similarity">Rotation and shift</option>
+                <option value="translate">Shift only (faster)</option>
+                <option value="none">None (tracked mount or star trails)</option>
+              </select>
+            </label>
+            <label class="field"><span>Resolution</span>
+              <select data-setting="scale">
+                <option value="1">100%</option>
+                <option value="0.75">75%</option>
+                <option value="0.5">50%</option>
+                <option value="0.25">25%</option>
+              </select>
+            </label>
+            <label class="field"><span>Check frames first</span>
+              <select data-setting="analysis">
+                <option value="1">Yes: pick the sharpest reference, drop bad frames</option>
+                <option value="0">No: one pass, first photo is the reference</option>
+              </select>
+            </label>
+            <label class="field" data-show="analysis"><span>Frames to keep</span>
+              <select data-setting="keep">
+                <option value="1">All that align</option>
+                <option value="0.9">Sharpest 90%</option>
+                <option value="0.75">Sharpest 75%</option>
+                <option value="0.5">Sharpest 50%</option>
+                <option value="0.25">Sharpest 25%</option>
+              </select>
+            </label>
+            <label class="field"><span>Resampling</span>
+              <select data-setting="interp">
+                <option value="bilinear">Bilinear</option>
+                <option value="bicubic">Bicubic (sharper, slower)</option>
+              </select>
+            </label>
+            <label class="field"><span>Stars used to align</span>
+              <select data-setting="maxStars">
+                <option value="40">40</option>
+                <option value="80">80</option>
+                <option value="150">150</option>
+              </select>
+            </label>
+            <label class="field"><span>Background workers</span>
+              <select data-setting="workers"></select>
+            </label>
+            <label class="field"><span>Memory to use</span>
+              <select data-setting="memory">
+                <option value="auto">Automatic</option>
+                <option value="512">512 MB</option>
+                <option value="1024">1 GB</option>
+                <option value="2048">2 GB</option>
+                <option value="4096">4 GB</option>
+              </select>
+            </label>
+          </div>
+          <p class="fine-print">Median and sigma clipping store aligned frames in your browser's private storage, then combine them band by band. Without that storage, they re-read every photo for each band, which is much slower with many photos.</p>
+        </details>
+      </section>
+
+      <section class="entry" id="stepRun">
+        <h2><span class="entry-n">3</span>Stack</h2>
+        <button type="button" class="primary-btn" id="stackBtn" disabled>Stack photos</button>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-text">
+            <span id="progressPhase">Starting…</span>
+            <span id="progressTime"></span>
+          </div>
+          <button type="button" class="ghost-btn" id="cancelBtn">Cancel</button>
+        </div>
+      </section>
+
+      <section class="entry" id="stepFinish" hidden>
+        <h2><span class="entry-n">4</span>Finish and save</h2>
+        <p class="report" id="report"></p>
+
+        <div class="adjust">
+          <div class="row-actions">
+            <button type="button" class="ghost-btn" id="autoBtn">Auto adjust</button>
+            <button type="button" class="ghost-btn" id="resetBtn">Reset</button>
+          </div>
+          <label class="check"><input type="checkbox" data-post="gradient"> Remove light-pollution gradient</label>
+          <label class="check"><input type="checkbox" data-post="neutral"> Neutral background colour</label>
+          <label class="check"><input type="checkbox" data-post="crop"> Crop ragged edges</label>
+          <label class="slider"><span>Black point <output data-out="black"></output></span><input type="range" min="0" max="100" step="0.5" data-post="black"></label>
+          <label class="slider"><span>Brightness <output data-out="exposure"></output></span><input type="range" min="-2" max="3" step="0.05" data-post="exposure"></label>
+          <label class="slider"><span>Stretch faint stars <output data-out="stretch"></output></span><input type="range" min="0" max="100" step="0.5" data-post="stretch"></label>
+          <label class="slider"><span>Saturation <output data-out="saturation"></output></span><input type="range" min="0" max="2.5" step="0.05" data-post="saturation"></label>
+        </div>
+
+        <div class="downloads">
+          <button type="button" class="primary-btn" data-export="jpeg">Download JPEG</button>
+          <div class="row-actions">
+            <button type="button" class="ghost-btn" data-export="png">PNG</button>
+            <button type="button" class="ghost-btn" data-export="tiff16">TIFF 16-bit</button>
+            <button type="button" class="ghost-btn" data-export="tiff32" title="Unprocessed linear data for Siril, PixInsight or Photoshop">TIFF 32-bit linear</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="log-foot">
+        Works offline once loaded. Best in a recent Chrome, Edge, Safari or Firefox on a computer.
+      </footer>
+    </aside>
+  </main>
+
+  <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" hidden>
+
+  <script src="js/core.js"></script>
+  <script src="js/worker.js"></script>
+  <script src="js/post.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
